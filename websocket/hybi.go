@@ -294,11 +294,18 @@ func (handler *hybiFrameHandler) HandleFrame(frame frameReader) (frameReader, er
 		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 			return nil, err
 		}
+		var fh func()
 		io.Copy(ioutil.Discard, frame)
 		if frame.PayloadType() == PingFrame {
 			if _, err := handler.WritePong(b[:n]); err != nil {
 				return nil, err
 			}
+			fh = handler.conn.PingHandler
+		} else {
+			fh = handler.conn.PongHandler
+		}
+		if fh != nil {
+			fh()
 		}
 		return nil, nil
 	}

@@ -182,6 +182,10 @@ type Conn struct {
 	// MaxPayloadBytes limits the size of frame payload received over Conn
 	// by Codec's Receive method. If zero, DefaultMaxPayloadBytes is used.
 	MaxPayloadBytes int
+
+	// [lokhman] ping/pong handler functions.
+	PingHandler func()
+	PongHandler func()
 }
 
 // Read implements the io.Reader interface:
