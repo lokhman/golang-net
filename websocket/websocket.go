@@ -14,6 +14,7 @@ package websocket // import "golang.org/x/net/websocket"
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -343,6 +344,8 @@ func (cd Codec) Receive(ws *Conn, v interface{}) (err error) {
 		}
 		ws.frameReader = nil
 	}
+	// [lokhman] buffer for frame fragmentation
+	buf := bytes.NewBuffer(nil)
 again:
 	frame, err := ws.frameReaderFactory.NewFrameReader()
 	if err != nil {
@@ -359,21 +362,28 @@ again:
 	if maxPayloadBytes == 0 {
 		maxPayloadBytes = DefaultMaxPayloadBytes
 	}
-	if hf, ok := frame.(*hybiFrameReader); ok && hf.header.Length > int64(maxPayloadBytes) {
-		// payload size exceeds limit, no need to call Unmarshal
-		//
-		// set frameReader to current oversized frame so that
-		// the next call to this function can drain leftover
-		// data before processing the next frame
-		ws.frameReader = frame
-		return ErrFrameTooLarge
+	fin := true
+	if hf, ok := frame.(*hybiFrameReader); ok {
+		if hf.header.Length+int64(buf.Len()) > int64(maxPayloadBytes) {
+			// payload size exceeds limit, no need to call Unmarshal
+			//
+			// set frameReader to current oversized frame so that
+			// the next call to this function can drain leftover
+			// data before processing the next frame
+			ws.frameReader = frame
+			return ErrFrameTooLarge
+		}
+		fin = hf.header.Fin
 	}
-	payloadType := frame.PayloadType()
-	data, err := ioutil.ReadAll(frame)
-	if err != nil {
+	if _, err = buf.ReadFrom(frame); err != nil {
 		return err
 	}
-	return cd.Unmarshal(data, payloadType, v)
+	if !fin {
+		// [lokhman] if fragmented, load next frame
+		goto again
+	}
+	payloadType := frame.PayloadType()
+	return cd.Unmarshal(buf.Bytes(), payloadType, v)
 }
 
 func marshal(v interface{}) (msg []byte, payloadType byte, err error) {
