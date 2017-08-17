@@ -237,7 +237,12 @@ func (ws *Conn) Write(msg []byte) (n int, err error) {
 
 // Close implements the io.Closer interface.
 func (ws *Conn) Close() error {
-	err := ws.frameHandler.WriteClose(ws.defaultCloseStatus)
+	return ws.CloseStatus(ws.defaultCloseStatus)
+}
+
+// [lokhman] support for close status code.
+func (ws *Conn) CloseStatus(status int) error {
+	err := ws.frameHandler.WriteClose(status)
 	err1 := ws.rwc.Close()
 	if err != nil {
 		return err
